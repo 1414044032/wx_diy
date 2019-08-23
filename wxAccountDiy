@@ -1,0 +1,88 @@
+# -*- coding: utf-8 -*-
+from flask import Flask,request,redirect
+import hashlib
+import requests
+import json
+app = Flask(__name__)
+# 打印用户信息路由 域名使用natapp映射内网地址
+success_url = "http%3a%2f%2fh3dyi6.natappfree.cc%2fsuccessPage"
+
+# 微信公众平台 提供的
+appid = "wxcfbbba2ef21eqweqfa45a"
+secret = "qweqdawqeweqweqweqweqeqwqeqwe"
+
+# 配置初始化接口
+@app.route('/weixin',methods=['GET'])
+def hello():
+    # 开发模式 微信校验
+    my_signature = request.args.get('signature')  # 获取携带的signature参数
+    my_timestamp = request.args.get('timestamp')  # 获取携带的timestamp参数
+    my_nonce = request.args.get('nonce')  # 获取携带的nonce参数
+    my_echostr = request.args.get('echostr')  # 获取携带的echostr参数
+
+    token = 'hahaha'  # 一定要跟刚刚填写的token一致
+
+    # 进行字典排序
+    data = [token, my_timestamp, my_nonce]
+    data.sort()
+
+    # 拼接成字符串
+    temp = ''.join(data)
+
+    # 进行sha1加密
+    mysignature = hashlib.sha1(temp.encode('utf-8')).hexdigest()
+
+    # 加密后的字符串可与signature对比，标识该请求来源于微信
+    if my_signature == mysignature:
+        return my_echostr
+
+# 已定义菜单接口
+@app.route('/menu')
+def munu():
+    # appid  appsecret
+    url_get_accesstoken = "https://api.weixin.qq.com/cgi-bin/token?" \
+                          "grant_type=client_credential&appid=%s&secret=%s" % (appid, secret)
+    access_token = requests.get(url_get_accesstoken).json().get("access_token")
+    # 自定义菜单  后面参数根据上面接口 access_token  获取的结果来填充
+    url_set_menu = "https://api.weixin.qq.com/cgi-bin/menu/create?access_token=%s" % (access_token,)
+    # 菜单格则
+    menu = {
+     "button": [
+         {
+             "type": "view",
+             "name": "西安",
+             # 静默授权
+             "url": "https://open.weixin.qq.com/connect/oauth2/authorize"
+                    "?appid={}&redirect_uri={}"
+                    "&response_type=code&scope=snsapi_userinfo&state=123#wechat_redirect".format(appid, success_url)
+         }
+     ]
+    }
+    # 修改requests json dump 源代码：ensure_ascii=False
+    response = requests.post(url_set_menu, json=menu)
+    # 返回值判断是否成功
+    return response.text
+
+
+# 用户授权获取授权接口
+@app.route('/successPage')
+def successPage():
+    print(request.args)
+    code = request.args.get("code")
+    # 通过code 获取access_token
+    base_url_code = "https://api.weixin.qq.com/sns/oauth2/access_token?" \
+                    "appid={}&secret={}&code={}" \
+                    "&grant_type=authorization_code"
+    result = requests.get(base_url_code.format(appid, secret, code)).json()
+    access_token = result.get("access_token")
+    openid = result.get("openid")
+    # 通过 上面两个参数获取到user信息
+    base_url_info = "https://api.weixin.qq.com/sns/userinfo?access_token={}&openid={}&lang=zh_CN"
+    response1 = requests.get(base_url_info.format(access_token, openid))
+    # 返回值为json 就是 用户的基本信息
+    print(response1.text)
+    return response1.text
+
+
+if __name__ == '__main__':
+    app.run(port=8886,host="127.0.0.1",debug=True)
